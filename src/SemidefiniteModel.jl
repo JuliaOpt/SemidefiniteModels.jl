@@ -1,5 +1,8 @@
 module SemidefiniteModel
 
-# package code goes here
+using MathProgBase
+importall MathProgBase.SolverInterface
+
+include("SD.jl")
 
 end # module

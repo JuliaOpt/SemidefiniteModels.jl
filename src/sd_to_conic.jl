@@ -50,8 +50,8 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
     #  st b-Ax ∈ K_1     st lb <= Ax <= b
     #        x ∈ K_2         l <=  x <= u
 
-    # If a cone is anything other than [:Free,:Zero,:NonNeg,:NonPos,:SOC,:SDP], give up.
-    bad_cones = [:ExpPrimal, :ExpDual, :SOCRotated]
+    # If a cone is anything other than [:Free,:Zero,:NonNeg,:NonPos,:SOC,:SOCRotated,:SDP], give up.
+    bad_cones = [:ExpPrimal, :ExpDual]
     for (cone,_) in var_cones
         cone in bad_cones && error("Cone type $(cone) not supported")
     end
@@ -62,6 +62,7 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
     blk = 0
     blkdims = Int[]
     socblks = Int[]
+    socblksrotated = IntSet()
     socblksvarconemap = Int[]
     # For a variable at column index `col' in the conic model,
     # varmap[col] gives an array such that each coefficient A[.,col] should be replaced by the sum,
@@ -104,6 +105,17 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
                 varmap[idxs[i]] = [(blk,1,i,i == 1 ? 1. : .5)]
             end
             push!(socblks, blk)
+            push!(socblksvarconemap, varconeidx)
+        elseif cone == :SOCRotated
+            blk += 1
+            push!(blkdims, length(idxs)-1)
+            varmap[idxs[1]] = [(blk,1,1,1.)]
+            varmap[idxs[2]] = [(blk,2,2,.5)]
+            for i in 3:length(idxs)
+                varmap[idxs[i]] = [(blk,1,i-1,.5)]
+            end
+            push!(socblks, blk)
+            push!(socblksrotated, length(socblks))
             push!(socblksvarconemap, varconeidx)
         elseif cone == :SDP
             d = getmatdim(length(idxs))
@@ -168,6 +180,17 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
                 end
                 push!(socblks, blk)
                 push!(socblksvarconemap, 0)
+            elseif cone == :SOCRotated
+                blk += 1
+                push!(blkdims, length(idxs)-1)
+                slackmap[idxs[1]] = (blk,1,1,1.)
+                slackmap[idxs[2]] = (blk,2,2,.5)
+                for i in 3:length(idxs)
+                    slackmap[idxs[i]] = (blk,1,i-1,.5)
+                end
+                push!(socblks, blk)
+                push!(socblksrotated, length(socblks))
+                push!(socblksvarconemap, 0)
             elseif cone == :SDP
                 d = getmatdim(length(idxs))
                 k = 0
@@ -197,11 +220,14 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
         blk = socblks[i]
         d = blkdims[blk]
         socconstr[i] = constr
-        constr += div(d*(d-1), 2)
+        nconstr = d*(d-1)
+        if i in socblksrotated
+            nconstr -= 1
+        end
+        constr += div(nconstr, 2)
     end
 
     # Writing the sparse block diagonal matrices
-    # FIXME, why am I writting zeros ????
     sdmodel = model.sdmodel
     loadproblem!(sdmodel, blkdims, constr)
     for row in 1:m
@@ -244,23 +270,30 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
             end
         end
     end
-    model.varnewconstrmap = varnewconstrmap = [Tuple{Int,Float64}[] for i in 1:n]
+    model.varnewconstrmap = varnewconstrmap = Dict{NTuple{3, Int}, Vector{Tuple{Int,Float64}}}()
     for k in 1:length(socblks)
         constr = socconstr[k]
         blk = socblks[k]
+        diageq = k in socblksrotated ? 2 : 1
         d = blkdims[blk]
         for i in 2:d
             for j in i:d
-                constr += 1
-                setconstrB!(sdmodel, 0, constr)
-                setconstrentry!(sdmodel, i==j ? 1. : .5, constr, blk, i, j)
-                if i == j
-                    varcone = socblksvarconemap[k]
-                    if varcone != 0
-                        _, idxs = var_cones[varcone]
-                        push!(model.varnewconstrmap[idxs[1]], (constr, -1.))
+                if i != j || i > diageq
+                    constr += 1
+                    setconstrB!(sdmodel, 0, constr)
+                    setconstrentry!(sdmodel, i==j ? 1. : .5, constr, blk, i, j)
+                    if i == j && i > diageq
+                        varcone = socblksvarconemap[k]
+                        if varcone != 0
+                            _, idxs = var_cones[varcone]
+                            key = (blk, diageq, diageq)
+                            if !haskey(varnewconstrmap, key)
+                                varnewconstrmap[key] = Tuple{Int, Float64}[]
+                            end
+                            push!(varnewconstrmap[key], (constr, -1.))
+                        end
+                        setconstrentry!(sdmodel, -1., constr, blk, diageq, diageq)
                     end
-                    setconstrentry!(sdmodel, -1., constr, blk, 1, 1)
                 end
             end
         end
@@ -321,10 +354,13 @@ function getvardual(model::SDtoConicBridge)
     z = zeros(Float64, n)
     for col in 1:n
         for (blk, i, j, coef) in model.varmap[col]
-            z[col] += Z[blk][i,j] / coef
-        end
-        for (constr, coef) in model.varnewconstrmap[col]
-            z[col] -= y[constr] * coef
+            cur = Z[blk][i,j]
+            if haskey(model.varnewconstrmap, (blk, i, j))
+                for (constr, ccoef) in model.varnewconstrmap[(blk, i, j)]
+                    cur -= y[constr] * ccoef
+                end
+            end
+            z[col] += cur / coef
         end
     end
     z

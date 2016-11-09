@@ -1,4 +1,4 @@
-module SemidefiniteModel
+module SemidefiniteModels
 
 using MathProgBase
 importall MathProgBase.SolverInterface

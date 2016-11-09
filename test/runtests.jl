@@ -1,4 +1,4 @@
-using SemidefiniteModel
+using SemidefiniteModels
 using Base.Test
 
 include("sdinterface.jl")

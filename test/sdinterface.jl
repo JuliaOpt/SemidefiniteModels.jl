@@ -1,5 +1,5 @@
 using Base.Test
-using SemidefiniteModel
+using SemidefiniteModels
 using MathProgBase.SolverInterface
 
 function sdtest(solver::MathProgBase.AbstractMathProgSolver; duals=false, tol=1e-6)

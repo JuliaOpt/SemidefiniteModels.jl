@@ -1,6 +1,6 @@
 # Methods for the Semidefinite interface
 
-abstract AbstractSDModel <: AbstractMathProgModel
+@compat abstract type AbstractSDModel <: AbstractMathProgModel end
 export AbstractSDModel
 
 MathProgBase.SolverInterface.@define_interface begin

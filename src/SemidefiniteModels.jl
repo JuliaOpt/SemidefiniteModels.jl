@@ -1,5 +1,7 @@
 module SemidefiniteModels
 
+using Compat
+
 using MathProgBase
 importall MathProgBase.SolverInterface
 

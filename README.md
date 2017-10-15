@@ -8,6 +8,6 @@
 This package extends MathProgBase with `SDModel` representing a semidefinite programming problem in the following form
 ```
 max ⟨C, X⟩            min ⟨b, y⟩
-    ⟨A_i, X⟩ = b_i        ∑ A_i y_i ⪰ C
+    ⟨A_i, X⟩ = b_i        ∑ A_i y_i ⪯ C
           X  ⪰ 0
 ```

@@ -102,7 +102,7 @@ function MPB.loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_con
             blk += 1
             push!(blkdims, length(idxs))
             for i in 1:length(idxs)
-                varmap[idxs[i]] = [(blk,1,i,i == 1 ? 1. : .5)]
+                varmap[idxs[i]] = [(blk, 1, i, i == 1 ? 1.0 : 0.5)]
             end
             push!(socblks, blk)
             push!(socblksvarconemap, varconeidx)
@@ -126,7 +126,7 @@ function MPB.loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_con
                 for j in i:d
                     k += 1
                     # In the MPB conic model, those are scaled by sqrt(2)
-                    coef = i == j ? 1. : √2
+                    coef = i == j ? 1.0 : inv(√2)
                     varmap[idxs[k]] = [(blk,i,j,coef)]
                 end
             end
@@ -159,24 +159,24 @@ function MPB.loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_con
                 constrmap[idx] = constr
             end
             if cone == :Zero
-                slackmap[idxs] = ((0,0,0,0.),)
+                slackmap[idxs] .= ((0,0,0,0.),)
             elseif cone == :NonNeg
                 for idx in idxs
                     blk += 1
                     push!(blkdims, 1)
-                    slackmap[idx] = (blk,1,1,1.)
+                    slackmap[idx] .= ((blk,1,1,1.),)
                 end
             elseif cone == :NonPos
                 for idx in idxs
                     blk += 1
                     push!(blkdims, 1)
-                    slackmap[idx] = (blk,1,1,-1.)
+                    slackmap[idx] .= ((blk,1,1,-1.),)
                 end
             elseif cone == :SOC
                 blk += 1
                 push!(blkdims, length(idxs))
                 for i in 1:length(idxs)
-                    slackmap[idxs[i]] = (blk,1,i,i == 1 ? 1. : .5)
+                    slackmap[idxs[i]] .= ((blk,1,i,i == 1 ? 1. : .5),)
                 end
                 push!(socblks, blk)
                 push!(socblksvarconemap, 0)

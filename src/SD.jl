@@ -1,9 +1,9 @@
 # Methods for the Semidefinite interface
 
-@compat abstract type AbstractSDModel <: AbstractMathProgModel end
+@compat abstract type AbstractSDModel <: MPB.AbstractMathProgModel end
 export AbstractSDModel
 
-MathProgBase.SolverInterface.@define_interface begin
+MPB.@define_interface begin
     SDModel
     setconstrB!
     setconstrentry!

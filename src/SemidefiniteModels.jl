@@ -1,9 +1,11 @@
 module SemidefiniteModels
 
 using Compat
+using Compat.LinearAlgebra
+using Compat.SparseArrays
 
-using MathProgBase
-importall MathProgBase.SolverInterface
+import MathProgBase
+const MPB = MathProgBase.SolverInterface
 
 include("SD.jl")
 

@@ -164,19 +164,19 @@ function MPB.loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_con
                 for idx in idxs
                     blk += 1
                     push!(blkdims, 1)
-                    slackmap[idx] .= ((blk,1,1,1.),)
+                    slackmap[idx] = (blk,1,1,1.)
                 end
             elseif cone == :NonPos
                 for idx in idxs
                     blk += 1
                     push!(blkdims, 1)
-                    slackmap[idx] .= ((blk,1,1,-1.),)
+                    slackmap[idx] = (blk,1,1,-1.)
                 end
             elseif cone == :SOC
                 blk += 1
                 push!(blkdims, length(idxs))
                 for i in 1:length(idxs)
-                    slackmap[idxs[i]] .= ((blk,1,i,i == 1 ? 1. : .5),)
+                    slackmap[idxs[i]] = (blk,1,i,i == 1 ? 1. : .5)
                 end
                 push!(socblks, blk)
                 push!(socblksvarconemap, 0)

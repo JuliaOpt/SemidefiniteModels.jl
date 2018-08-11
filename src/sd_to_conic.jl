@@ -3,7 +3,7 @@
 # To enable Conic support from an SD solver, define, e.g.,
 # ConicModel(s::CSDPSolver) = SDtoConicBridge(SDModel(s))
 
-type SDtoConicBridge <: MPB.AbstractConicModel
+mutable struct SDtoConicBridge <: MPB.AbstractConicModel
     sdmodel::AbstractSDModel
     varmap
     varnewconstrmap

@@ -6,9 +6,8 @@
 #   http://www.opt.tu-darmstadt.de/scipsdp/downloads/data_format.txt
 
 using GZip
-import MathProgBase.SolverInterface.loadproblem!
 
-function loadproblem!(m::AbstractConicModel, filename::AbstractString; all_bin=false)
+function MPB.loadproblem!(m::MPB.AbstractConicModel, filename::AbstractString; all_bin=false)
     if endswith(filename,".dat-s") || endswith(filename,".dat-s.gz")
        loadsdpa!(m, filename)
     else
@@ -16,7 +15,7 @@ function loadproblem!(m::AbstractConicModel, filename::AbstractString; all_bin=f
     end
 end
 
-function loadsdpa!(m::AbstractConicModel, filename::String; all_bin=false)
+function loadsdpa!(m::MPB.AbstractConicModel, filename::String; all_bin=false)
     if endswith(filename, ".gz")
         fd = gzopen(filename, "r")
     else
@@ -55,9 +54,9 @@ function sdpatoconicdata(io::IO, all_bin::Bool)
         end
     end
 
-    LPblocks = find(size -> (sign(size) == -1), sizeblocks)
+    LPblocks = findall(size -> (sign(size) == -1), sizeblocks)
     LPblock = isempty(LPblocks) ? 0 : first(LPblocks)
-    PSDblocks = find(size -> (sign(size) == 1), sizeblocks)
+    PSDblocks = findall(size -> (sign(size) == 1), sizeblocks)
 
     if LPblock != 0
         sizeblocks[LPblock] *= -1

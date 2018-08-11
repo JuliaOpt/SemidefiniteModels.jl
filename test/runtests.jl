@@ -1,5 +1,7 @@
 using SemidefiniteModels
-using Base.Test
+using Compat
+using Compat.Test
+using Compat.LinearAlgebra
 
 include("sdinterface.jl")
 using CSDP

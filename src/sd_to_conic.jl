@@ -3,7 +3,7 @@
 # To enable Conic support from an SD solver, define, e.g.,
 # ConicModel(s::CSDPSolver) = SDtoConicBridge(SDModel(s))
 
-type SDtoConicBridge <: AbstractConicModel
+mutable struct SDtoConicBridge <: MPB.AbstractConicModel
     sdmodel::AbstractSDModel
     varmap
     varnewconstrmap
@@ -22,8 +22,8 @@ SDtoConicBridge(m::AbstractSDModel) = SDtoConicBridge(m, nothing, nothing, nothi
 
 export SDtoConicBridge
 
-numvar(m::SDtoConicBridge) = size(m.A,2)
-numconstr(m::SDtoConicBridge) = size(m.A,1)
+MPB.numvar(m::SDtoConicBridge) = size(m.A,2)
+MPB.numconstr(m::SDtoConicBridge) = size(m.A,1)
 
 function getmatdim(k)
     # n*(n+1)/2 = k
@@ -37,7 +37,7 @@ function getmatdim(k)
 end
 
 # To transform Conic problems into SD problems
-function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
+function MPB.loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
     m, n = size(A)
     model.c = c
     model.A = A
@@ -62,14 +62,14 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
     blk = 0
     blkdims = Int[]
     socblks = Int[]
-    socblksrotated = IntSet()
+    socblksrotated = BitSet()
     socblksvarconemap = Int[]
     # For a variable at column index `col' in the conic model,
     # varmap[col] gives an array such that each coefficient A[.,col] should be replaced by the sum,
     # over each element (blk, i, j, coef) of the array of
     # X[blk][i,j] * (A[.,col] * coef)
     # Where X[blk] is the blk'th block of X
-    model.varmap = varmap = Vector{Vector{Tuple{Int,Int,Int,Float64}}}(n)
+    model.varmap = varmap = Vector{Vector{Tuple{Int,Int,Int,Float64}}}(undef, n)
     varconeidx = 0
     for (cone,idxs) in var_cones
         varconeidx += 1
@@ -102,7 +102,7 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
             blk += 1
             push!(blkdims, length(idxs))
             for i in 1:length(idxs)
-                varmap[idxs[i]] = [(blk,1,i,i == 1 ? 1. : .5)]
+                varmap[idxs[i]] = [(blk, 1, i, i == 1 ? 1.0 : 0.5)]
             end
             push!(socblks, blk)
             push!(socblksvarconemap, varconeidx)
@@ -126,7 +126,7 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
                 for j in i:d
                     k += 1
                     # In the MPB conic model, those are scaled by sqrt(2)
-                    coef = i == j ? 1. : 1./sqrt(2)
+                    coef = i == j ? 1.0 : inv(√2)
                     varmap[idxs[k]] = [(blk,i,j,coef)]
                 end
             end
@@ -139,11 +139,11 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
     # For the constraint at row index `row' in the conic model,
     # constrmap[row] gives the index of the constraint in the SD model,
     # a value of 0 meaning that it does not correspond to any constraint
-    model.constrmap = constrmap = Vector{Int}(m)
-    constrmapcheck = IntSet()
+    model.constrmap = constrmap = Vector{Int}(undef, m)
+    constrmapcheck = BitSet()
     # slackmap[row] gives (blk,i,j,coef) indicating that a slack variable has been created at X[blk][i,j] with coefficient coef
     # blk=0 corresponds to no slack
-    slackmap = Vector{Tuple{Int,Int,Int,Float64}}(m)
+    slackmap = Vector{Tuple{Int,Int,Int,Float64}}(undef, m)
     model.constrscaling = constrscaling = ones(Float64, m)
     for (cone,idxs) in constr_cones
         if cone == :Free
@@ -159,7 +159,7 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
                 constrmap[idx] = constr
             end
             if cone == :Zero
-                slackmap[idxs] = (0,0,0,0.)
+                slackmap[idxs] .= ((0,0,0,0.),)
             elseif cone == :NonNeg
                 for idx in idxs
                     blk += 1
@@ -210,12 +210,12 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
             end
         end
     end
-    if constrmapcheck != IntSet(1:m)
+    if constrmapcheck != BitSet(1:m)
         throw(ArgumentError("Some variable have no cone"))
     end
     @assert blk == length(blkdims)
 
-    socconstr = Vector{Int}(length(socblks))
+    socconstr = Vector{Int}(undef, length(socblks))
     for i in 1:length(socblks)
         blk = socblks[i]
         d = blkdims[blk]
@@ -229,7 +229,7 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
 
     # Writing the sparse block diagonal matrices
     sdmodel = model.sdmodel
-    loadproblem!(sdmodel, blkdims, constr)
+    MPB.loadproblem!(sdmodel, blkdims, constr)
     for row in 1:m
         if constrmap[row] != 0
             setconstrB!(sdmodel, b[row] * constrscaling[row], constrmap[row])
@@ -308,16 +308,15 @@ function loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_cones)
     end
 end
 
-for f in [:optimize!, :status]
-    @eval $f(model::SDtoConicBridge) = $f(model.sdmodel)
+MPB.optimize!(model::SDtoConicBridge) = MPB.optimize!(model.sdmodel)
+MPB.status(model::SDtoConicBridge) = MPB.status(model.sdmodel)
+
+function MPB.getobjval(model::SDtoConicBridge)
+    -MPB.getobjval(model.sdmodel)
 end
 
-function getobjval(model::SDtoConicBridge)
-    -getobjval(model.sdmodel)
-end
-
-function getsolution(model::SDtoConicBridge)
-    X = getsolution(model.sdmodel)
+function MPB.getsolution(model::SDtoConicBridge)
+    X = MPB.getsolution(model.sdmodel)
     n = size(model.A, 2)
     x = zeros(Float64, n)
     for col in 1:n
@@ -331,12 +330,12 @@ function getsolution(model::SDtoConicBridge)
     x
 end
 
-function getdual(model::SDtoConicBridge)
-    y = getdual(model.sdmodel)
+function MPB.getdual(model::SDtoConicBridge)
+    y = MPB.getdual(model.sdmodel)
     constrmap = model.constrmap
     constrscaling = model.constrscaling
     m = size(model.A, 1)
-    dual = Vector{Float64}(m)
+    dual = Vector{Float64}(undef, m)
     for row in 1:m
         if constrmap[row] != 0
             dual[row] = y[constrmap[row]] * constrscaling[row]
@@ -347,9 +346,9 @@ function getdual(model::SDtoConicBridge)
     dual
 end
 
-function getvardual(model::SDtoConicBridge)
-    y = getdual(model.sdmodel)
-    Z = getvardual(model.sdmodel)
+function MPB.getvardual(model::SDtoConicBridge)
+    y = MPB.getdual(model.sdmodel)
+    Z = MPB.getvardual(model.sdmodel)
     n = size(model.A, 2)
     z = zeros(Float64, n)
     for col in 1:n
@@ -366,20 +365,20 @@ function getvardual(model::SDtoConicBridge)
     z
 end
 
-function getvartype(model::SDtoConicBridge, col)
+function MPB.getvartype(model::SDtoConicBridge, col)
     # they are all supposed to be the same so we take the first one
     blk, i, j, _ = first(model.varmap[col])
-    getvartype(model.sdmodel, blk, i, j)
+    MPB.getvartype(model.sdmodel, blk, i, j)
 end
 
-function setvartype!(model::SDtoConicBridge, vtype)
+function MPB.setvartype!(model::SDtoConicBridge, vtype)
     for (col, vt) in enumerate(vtype)
         for (blk, i, j, _) in model.varmap[col]
-            setvartype!(model.sdmodel, vt, blk, i, j)
+            MPB.setvartype!(model.sdmodel, vt, blk, i, j)
         end
     end
 end
 
-for f in SolverInterface.methods_by_tag[:rewrap]
-    @eval $f(model::SDtoConicBridge) = $f(model.sdmodel)
+for f in MPB.methods_by_tag[:rewrap]
+    @eval MPB.$f(model::SDtoConicBridge) = MPB.$f(model.sdmodel)
 end

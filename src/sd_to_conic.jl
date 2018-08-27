@@ -159,7 +159,9 @@ function MPB.loadproblem!(model::SDtoConicBridge, c, A, b, constr_cones, var_con
                 constrmap[idx] = constr
             end
             if cone == :Zero
-                slackmap[idxs] .= ((0,0,0,0.),)
+                for idx in idxs
+                    slackmap[idx] = (0,0,0,0.)
+                end
             elseif cone == :NonNeg
                 for idx in idxs
                     blk += 1
